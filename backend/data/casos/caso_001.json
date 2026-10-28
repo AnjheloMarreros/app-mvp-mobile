@@ -1,0 +1,20 @@
+{
+  "id": "caso_001",
+  "titulo": "Caso 1",
+  "enunciado": "Un hombre solicita la adopción de una menor que se ha integrado a su entorno familiar y lo reconoce como padre. El artículo 378, inciso 2, del Código Civil establece un requisito de diferencia de edad entre el adoptante y la persona por adoptar.",
+  "contexto": [
+    "Carlos Alberto Arias Lovón solicita la adopción de una menor que se ha integrado a su entorno familiar y lo acepta como padre. El juez de primera instancia declaró fundada la demanda y la Sala Superior confirmó la decisión, inaplicando el artículo 378, inciso 2, del Código Civil por considerarlo incompatible con la Constitución."
+  ],
+  "instrucciones": [
+    "Redacta tu respuesta con orden lógico.",
+    "Incluye premisas, conclusión y sustento jurídico.",
+    "Evita contradicciones internas.",
+    "Usa conectores argumentativos claros."
+  ],
+  "criterios_evaluacion": [
+    "Estructura lógica del argumento",
+    "Relevancia y pertinencia del contenido",
+    "Consistencia lógica del razonamiento",
+    "Cohesión y calidad discursiva"
+  ]
+}
