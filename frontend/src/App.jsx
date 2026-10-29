@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, Mic, MicOff, Send, Scale, BookOpen, AlertCircle,
   CheckCircle2, Copy, Check, RotateCcw, ArrowLeft,
-  FileText, ShieldCheck, HelpCircle, Layers, Award, Edit3
+  FileText, ShieldCheck, HelpCircle, Layers, Award, Edit3,
+  Sparkles, ChevronDown, ChevronUp
 } from 'lucide-react';
 import './index.css';
 
@@ -30,6 +31,10 @@ function App() {
   const [dictationMode, setDictationMode] = useState('none'); // 'webspeech' | 'mediarecorder' | 'none'
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEditingText, setIsEditingText] = useState(false);
+
+  // Collapsible reference guides state (Plantilla & Ejemplo no editables)
+  const [showTemplate, setShowTemplate] = useState(false);
+  const [showExample, setShowExample] = useState(false);
 
   // Refs for audio handling
   const recognitionRef = useRef(null);
@@ -248,7 +253,7 @@ function App() {
 
   const sendAudioToDeepgram = async (audioBlob) => {
     setIsTranscribing(true);
-    setLoadingStep('Transcribiendo audio con Deepgram...');
+    setLoadingStep('Transcribiendo audio...');
     try {
       // Convert blob to base64
       const reader = new FileReader();
@@ -443,6 +448,8 @@ ${evaluation.final_feedback}
                   setEvaluation(null);
                   setArgumentText('');
                   setIsEditingText(false);
+                  setShowTemplate(false);
+                  setShowExample(false);
                   setErrorMessage('');
                   stopDictation();
                 }}
@@ -471,6 +478,8 @@ ${evaluation.final_feedback}
               stopDictation();
               setSelectedCase(null);
               setIsEditingText(false);
+              setShowTemplate(false);
+              setShowExample(false);
             }}
           >
             <ArrowLeft size={16} />
@@ -491,7 +500,6 @@ ${evaluation.final_feedback}
             {selectedCase.contexto && selectedCase.contexto.length > 0 && (
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
                 <h4 className="section-title">
-                  <FileText size={16} />
                   Hechos y Contexto del Caso
                 </h4>
                 <ul className="bullet-list">
@@ -506,8 +514,7 @@ ${evaluation.final_feedback}
             {selectedCase.instrucciones && selectedCase.instrucciones.length > 0 && (
               <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
                 <h4 className="section-title">
-                  <ShieldCheck size={16} />
-                  Pautas de Argumentación Solicitadas
+                  Instrucciones
                 </h4>
                 <ul className="bullet-list">
                   {selectedCase.instrucciones.map((inst, idx) => (
@@ -518,11 +525,95 @@ ${evaluation.final_feedback}
             )}
           </div>
 
+          {/* Guías de Consulta Desplegables (Plantilla y Ejemplo no editables) */}
+          <div className="reference-guides-container">
+            {/* Desplegable 1: Plantilla */}
+            <div className="accordion-card">
+              <button
+                className="accordion-header"
+                onClick={() => setShowTemplate(prev => !prev)}
+                type="button"
+                aria-expanded={showTemplate}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                  <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
+                    Plantilla de Estructura Argumentativa
+                  </span>
+                </div>
+                {showTemplate ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+
+              {showTemplate && (
+                <div className="accordion-content">
+                  <p className="accordion-description">
+                    Estructura lógica sugerida para tu argumentación oral (modelo Stephen Toulmin). Úsala como referencia antes de grabar tu dictado:
+                  </p>
+                  <div className="template-grid">
+                    <div className="template-item">
+                      <span className="template-badge badge-claim">[1. Postura / Afirmación Inicial]</span>
+                      <p className="template-text">Sostengo que... (Expón con claridad tu posición jurídica frente al conflicto).</p>
+                    </div>
+                    <div className="template-item">
+                      <span className="template-badge badge-data">[2. Hechos del Caso]</span>
+                      <p className="template-text">En este caso se evidencia que... (Detalla los antecedentes fácticos relevantes).</p>
+                    </div>
+                    <div className="template-item">
+                      <span className="template-badge badge-warrant">[3. Garantía Lógica]</span>
+                      <p className="template-text">Todo acto o derecho exige que... (Regla o principio general que une los hechos con la conclusión).</p>
+                    </div>
+                    <div className="template-item">
+                      <span className="template-badge badge-backing">[4. Respaldo Normativo]</span>
+                      <p className="template-text">De conformidad con la Constitución / Código Civil peruano... (Cita artículos de ley o jurisprudencia).</p>
+                    </div>
+                    <div className="template-item">
+                      <span className="template-badge badge-rebuttal">[5. Reserva o Salvedad]</span>
+                      <p className="template-text">Si bien la contraparte argumenta..., carece de sustento porque... (Anticipa objeciones o contraargumentos).</p>
+                    </div>
+                    <div className="template-item">
+                      <span className="template-badge badge-conclusion">[6. Conclusión]</span>
+                      <p className="template-text">Por lo tanto, concluyo que... (Cierre categórico y consistente con las premisas).</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Desplegable 2: Ejemplo */}
+            <div className="accordion-card">
+              <button
+                className="accordion-header"
+                onClick={() => setShowExample(prev => !prev)}
+                type="button"
+                aria-expanded={showExample}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                  <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
+                    Ejemplo de Argumentación Jurídica
+                  </span>
+                </div>
+                {showExample ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </button>
+
+              {showExample && (
+                <div className="accordion-content">
+                  <p className="accordion-description">
+                    Ejemplo de discurso oral sólido para ilustrar el orden de las premisas:
+                  </p>
+                  <div className="example-text-box">
+                    “Considero que en el presente caso el contrato verbal carece de eficacia y validez vinculante plena respecto a las condiciones pretendidas. En primer lugar, de acuerdo con los hechos, no existió una manifestación de voluntad expresa ni un consentimiento indubitable sobre las prestaciones esenciales del servicio. Conforme a las normas del Código Civil peruano sobre la validez del acto jurídico y formación del consentimiento contractual, para que surja una obligación debe mediar acuerdo sobre los elementos esenciales. Aunque la contraparte apele a una supuesta intención tácita, esta resulta insuficiente ante la discrepancia probatoria. Por tanto, no puede exigirse el cumplimiento forzoso del acuerdo en las condiciones controvertidas.”
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Student Argument Input Workspace */}
           <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
               <h3 className="section-title" style={{ margin: 0 }}>
-                <Layers size={18} />
+                <BookOpen size={17} style={{ color: 'hsl(var(--primary-color))' }} />
                 Tu Sustento y Postura Jurídica
               </h3>
             </div>
@@ -539,7 +630,7 @@ ${evaluation.final_feedback}
                     <span className="sound-bar"></span>
                   </div>
                   <strong>
-                    {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo en vivo...' : 'Grabando audio para Deepgram...'}
+                    {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo en vivo...' : 'Grabando audio...'}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -562,7 +653,7 @@ ${evaluation.final_feedback}
               <div className="dictation-status-bar">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
-                  <span>Procesando y transcribiendo audio con IA (Deepgram Nova-2)...</span>
+                  <span>Procesando y transcribiendo audio...</span>
                 </div>
               </div>
             )}
@@ -591,7 +682,7 @@ ${evaluation.final_feedback}
                     Dicta tu postura jurídica
                   </h4>
                   <p style={{ fontSize: '0.86rem', color: 'hsl(var(--text-secondary))', maxWidth: '440px', margin: '0 auto', lineHeight: '1.5' }}>
-                    La entrada mediante escritura ha sido deshabilitada. Presiona el botón del micrófono y expón tus argumentos oralmente.
+                    Presiona el botón de micrófono y redacta tus argumentos oralmente.
                   </p>
                 </div>
               </div>
@@ -737,9 +828,6 @@ ${evaluation.final_feedback}
                   <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'hsl(var(--text-primary))' }}>
                     Resultados de la Evaluación
                   </h3>
-                  <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))' }}>
-                    Evaluación realizada según el modelo de Stephen Toulmin y la rúbrica oficial docente.
-                  </p>
                 </div>
 
                 <button
@@ -785,13 +873,12 @@ ${evaluation.final_feedback}
                             {nivel}
                           </div>
                           <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))' }}>
-                            Promedio ponderado en los 4 criterios de argumentación jurídica.
+                            Promedio ponderado en los 4 criterios de evaluación.
                           </div>
                         </div>
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Award size={32} style={{ color: scoreColor, opacity: 0.8 }} />
                       </div>
                     </div>
                   );
@@ -802,7 +889,6 @@ ${evaluation.final_feedback}
               {evaluation.rubric_scores && (
                 <div>
                   <h4 className="section-title">
-                    <Scale size={18} />
                     Rúbrica de Evaluación (Puntaje por Criterio)
                   </h4>
                   <div className="rubric-grid">
@@ -888,12 +974,12 @@ ${evaluation.final_feedback}
                 </div>
               )}
 
-              {/* Dictamen Docente y Justificación */}
+              {/* Dictamen */}
               {evaluation.rubric_scores?.justificacion && (
                 <div>
                   <h4 className="section-title">
                     <CheckCircle2 size={18} />
-                    Observaciones y Justificación Docente
+                    Observaciones
                   </h4>
                   <div className="feedback-box">
                     {evaluation.rubric_scores.justificacion}
@@ -905,8 +991,8 @@ ${evaluation.final_feedback}
               {evaluation.retrieved_laws && (
                 <div>
                   <h4 className="section-title">
-                    <BookOpen size={18} />
-                    Normativa Legal y Fuentes Recuperadas (RAG ChromaDB)
+                    <Scale size={18} />
+                    Normativa Legal y Fuentes Recuperadas
                   </h4>
                   <div className="laws-box">
                     {evaluation.retrieved_laws}
