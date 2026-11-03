@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Search, Mic, MicOff, Send, Scale, BookOpen, AlertCircle,
   CheckCircle2, Copy, Check, RotateCcw, ArrowLeft,
-  FileText, ShieldCheck, HelpCircle, Layers, Award, Edit3,
-  Sparkles, ChevronDown, ChevronUp
+  FileText, HelpCircle, Layers, Edit3,
+  ChevronDown, ChevronUp, X
 } from 'lucide-react';
 import './index.css';
 
@@ -42,6 +42,8 @@ function App() {
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
   const baseTextBeforeRecordingRef = useRef('');
+  const mediaStreamRef = useRef(null);
+  const isCanceledRef = useRef(false);
 
   // 1. Check backend health and load cases
   useEffect(() => {
@@ -90,7 +92,7 @@ function App() {
   // Clean up recording on unmount
   useEffect(() => {
     return () => {
-      stopDictation();
+      cancelDictation();
     };
   }, []);
 
@@ -108,6 +110,7 @@ function App() {
   // ==========================================
   const startDictation = async () => {
     setErrorMessage('');
+    isCanceledRef.current = false;
     baseTextBeforeRecordingRef.current = argumentText;
 
     // Check if Web Speech API is supported (Chrome, Edge, Safari iOS/macOS)
@@ -121,11 +124,16 @@ function App() {
         recognition.lang = 'es-PE'; // Español (Perú) con fallback a español general
 
         recognition.onstart = () => {
+          if (isCanceledRef.current) {
+            try { recognition.abort(); } catch { }
+            return;
+          }
           setIsRecording(true);
           setDictationMode('webspeech');
         };
 
         recognition.onresult = (event) => {
+          if (isCanceledRef.current) return;
           let currentSessionText = '';
           for (let i = 0; i < event.results.length; i++) {
             currentSessionText += event.results[i][0].transcript;
@@ -138,6 +146,7 @@ function App() {
         };
 
         recognition.onerror = (event) => {
+          if (isCanceledRef.current) return;
           console.warn("SpeechRecognition error:", event.error);
           if (event.error === 'not-allowed') {
             setErrorMessage('Permiso de micrófono denegado. Habilita el acceso al micrófono en la barra de direcciones de tu navegador.');
@@ -153,6 +162,11 @@ function App() {
         };
 
         recognition.onend = () => {
+          if (isCanceledRef.current) {
+            setIsRecording(false);
+            setDictationMode('none');
+            return;
+          }
           // If we didn't explicitly stop, but recognition ended, restart if still recording
           if (recognitionRef.current && isRecording) {
             try {
@@ -187,13 +201,14 @@ function App() {
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       audioChunksRef.current = [];
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (!isCanceledRef.current && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
@@ -201,6 +216,12 @@ function App() {
       mediaRecorder.onstop = async () => {
         // Stop audio tracks
         stream.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+
+        if (isCanceledRef.current) {
+          audioChunksRef.current = [];
+          return;
+        }
 
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         if (audioBlob.size > 0) {
@@ -241,6 +262,52 @@ function App() {
       }
     }
     setDictationMode('none');
+  };
+
+  const cancelDictation = () => {
+    isCanceledRef.current = true;
+    setIsRecording(false);
+    setDictationMode('none');
+    setRecordingSeconds(0);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    if (recognitionRef.current) {
+      const rec = recognitionRef.current;
+      recognitionRef.current = null;
+      try {
+        rec.abort();
+      } catch {
+        // ignore
+      }
+    }
+
+    if (mediaRecorderRef.current) {
+      const mr = mediaRecorderRef.current;
+      mediaRecorderRef.current = null;
+      try {
+        if (mr.state !== 'inactive') {
+          mr.stop();
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    if (mediaStreamRef.current) {
+      try {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      } catch {
+        // ignore
+      }
+      mediaStreamRef.current = null;
+    }
+
+    audioChunksRef.current = [];
+
+    // Revert text to the state before recording began
+    setArgumentText(baseTextBeforeRecordingRef.current);
   };
 
   const toggleRecording = () => {
@@ -376,11 +443,11 @@ ${evaluation.final_feedback}
 
   // Helper color for scores
   const getScoreColor = (score) => {
-    if (score >= 4.5) return 'var(--level-5)';
-    if (score >= 3.5) return 'var(--level-4)';
-    if (score >= 2.5) return 'var(--level-3)';
-    if (score >= 1.5) return 'var(--level-2)';
-    return 'var(--level-1)';
+    if (score >= 4.5) return 'hsl(var(--level-5))';
+    if (score >= 3.5) return 'hsl(var(--level-4))';
+    if (score >= 2.5) return 'hsl(var(--level-3))';
+    if (score >= 1.5) return 'hsl(var(--level-2))';
+    return 'hsl(var(--level-1))';
   };
 
   return (
@@ -451,7 +518,7 @@ ${evaluation.final_feedback}
                   setShowTemplate(false);
                   setShowExample(false);
                   setErrorMessage('');
-                  stopDictation();
+                  cancelDictation();
                 }}
               >
                 <div className="case-card-header">
@@ -475,7 +542,7 @@ ${evaluation.final_feedback}
           <button
             className="back-button"
             onClick={() => {
-              stopDictation();
+              cancelDictation();
               setSelectedCase(null);
               setIsEditingText(false);
               setShowTemplate(false);
@@ -630,20 +697,29 @@ ${evaluation.final_feedback}
                     <span className="sound-bar"></span>
                   </div>
                   <strong>
-                    {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo en vivo...' : 'Grabando audio...'}
+                    {/* {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo audio...' : 'Grabando audio...'} */}
+                    {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo audio...' : 'Escuchando y transcribiendo audio...'}
                   </strong>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: '700' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: '700', marginRight: '0.25rem' }}>
                     {formatSeconds(recordingSeconds)}
                   </span>
                   <button
                     className="btn-stop-recording"
                     onClick={stopDictation}
-                    title="Detener dictado y procesar"
+                    title="Detener dictado y procesar el argumento"
                   >
                     <MicOff size={15} />
                     Detener
+                  </button>
+                  <button
+                    className="btn-cancel-recording"
+                    onClick={cancelDictation}
+                    title="Cancelar grabación y descartar lo hablado"
+                  >
+                    <X size={15} />
+                    Cancelar
                   </button>
                 </div>
               </div>
@@ -899,7 +975,7 @@ ${evaluation.final_feedback}
                       { key: 'cohesion_calidad', label: 'Cohesión Discursiva', desc: 'Claridad y vocabulario' }
                     ].map(crit => {
                       const score = evaluation.rubric_scores[crit.key] || 0;
-                      const percentage = (score / 5) * 100;
+                      const percentage = score > 0 ? Math.max((score / 5) * 100, 20) : 0;
                       const color = getScoreColor(score);
                       return (
                         <div key={crit.key} className="rubric-card">
