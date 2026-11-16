@@ -7,9 +7,9 @@ from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmb
 from langchain_chroma import Chroma
 from langgraph.graph import StateGraph, START, END
 
-load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv()
 CHROMA_PATH = os.path.join(BASE_DIR, "chroma_db")
 
 # ==========================================
