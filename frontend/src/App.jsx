@@ -1,23 +1,48 @@
 import { useState, useEffect, useRef } from 'react';
+import { useAuth, AuthProvider, API_BASE } from './context/AuthContext';
+import { AccessibilityProvider } from './context/AccessibilityContext';
+import Navbar from './components/Navbar';
+import AuthModal from './components/AuthModal';
+import AccessibilityMenu from './components/AccessibilityMenu';
+import StudentHistory from './components/StudentHistory';
+import StudentAnalytics from './components/StudentAnalytics';
+import StudentClassJoin from './components/StudentClassJoin';
+import TeacherClasses from './components/TeacherClasses';
+import TeacherGradesReport from './components/TeacherGradesReport';
+import TeacherCaseManager from './components/TeacherCaseManager';
 import {
   Search, Mic, MicOff, Send, Scale, BookOpen, AlertCircle,
   CheckCircle2, Copy, Check, RotateCcw, ArrowLeft,
   FileText, HelpCircle, Layers, Edit3,
-  ChevronDown, ChevronUp, X
+  ChevronDown, ChevronUp, X, Sparkles
 } from 'lucide-react';
 import './index.css';
 
-const API_BASE = 'http://localhost:8000';
+function MainApp() {
+  const { user, authFetch } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
+  const [activeTab, setActiveTab] = useState('casos');
+  const [selectedClassIdForReport, setSelectedClassIdForReport] = useState(null);
 
-function App() {
+  // Set default tab based on user role
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'docente') {
+        setActiveTab('clases');
+      } else {
+        setActiveTab('casos');
+      }
+    }
+  }, [user?.role]);
+
+  // Case Solving State
   const [cases, setCases] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCase, setSelectedCase] = useState(null);
+  const [backendStatus, setBackendStatus] = useState('checking');
 
-  // Backend status
-  const [backendStatus, setBackendStatus] = useState('checking'); // 'online' | 'offline' | 'checking'
-
-  // Argument and evaluation state
+  // Argument & Evaluation State
   const [argumentText, setArgumentText] = useState('');
   const [evaluation, setEvaluation] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -25,18 +50,18 @@ function App() {
   const [errorMessage, setErrorMessage] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // Voice dictation state
+  // Voice Dictation State
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [dictationMode, setDictationMode] = useState('none'); // 'webspeech' | 'mediarecorder' | 'none'
+  const [dictationMode, setDictationMode] = useState('none');
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isEditingText, setIsEditingText] = useState(false);
 
-  // Collapsible reference guides state (Plantilla & Ejemplo no editables)
+  // Collapsible reference guides (Plantilla & Ejemplo)
   const [showTemplate, setShowTemplate] = useState(false);
   const [showExample, setShowExample] = useState(false);
 
-  // Refs for audio handling
+  // Audio Refs
   const recognitionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -45,15 +70,15 @@ function App() {
   const mediaStreamRef = useRef(null);
   const isCanceledRef = useRef(false);
 
-  // 1. Check backend health and load cases
+  // 1. Initial health and cases load
   useEffect(() => {
     checkHealthAndFetchCases();
-  }, []);
+  }, [user]);
 
   const checkHealthAndFetchCases = async () => {
     try {
       setBackendStatus('checking');
-      const healthRes = await fetch(`${API_BASE}/api/health`, { method: 'GET' });
+      const healthRes = await fetch(`${API_BASE}/api/health`);
       if (healthRes.ok) {
         setBackendStatus('online');
       } else {
@@ -64,7 +89,7 @@ function App() {
     }
 
     try {
-      const casesRes = await fetch(`${API_BASE}/api/cases`);
+      const casesRes = await authFetch('/api/cases');
       if (casesRes.ok) {
         const data = await casesRes.json();
         setCases(data);
@@ -74,7 +99,7 @@ function App() {
     }
   };
 
-  // Timer for recording duration
+  // Recording Timer
   useEffect(() => {
     if (isRecording) {
       setRecordingSeconds(0);
@@ -89,31 +114,26 @@ function App() {
     };
   }, [isRecording]);
 
-  // Clean up recording on unmount
   useEffect(() => {
     return () => {
       cancelDictation();
     };
   }, []);
 
-  // Filter cases by search
   const filteredCases = cases.filter(c => {
     const term = searchTerm.toLowerCase();
     const titleMatch = (c.titulo || '').toLowerCase().includes(term);
     const statementMatch = (c.enunciado || '').toLowerCase().includes(term);
-    const idMatch = (c.id || '').toLowerCase().includes(term);
-    return titleMatch || statementMatch || idMatch;
+    const authorMatch = (c.teacher_name || '').toLowerCase().includes(term);
+    return titleMatch || statementMatch || authorMatch;
   });
 
-  // ==========================================
-  // Voice Dictation Implementation
-  // ==========================================
+  // Voice Dictation Methods
   const startDictation = async () => {
     setErrorMessage('');
     isCanceledRef.current = false;
     baseTextBeforeRecordingRef.current = argumentText;
 
-    // Check if Web Speech API is supported (Chrome, Edge, Safari iOS/macOS)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     if (SpeechRecognition) {
@@ -121,7 +141,7 @@ function App() {
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'es-PE'; // Español (Perú) con fallback a español general
+        recognition.lang = 'es-PE';
 
         recognition.onstart = () => {
           if (isCanceledRef.current) {
@@ -149,13 +169,11 @@ function App() {
           if (isCanceledRef.current) return;
           console.warn("SpeechRecognition error:", event.error);
           if (event.error === 'not-allowed') {
-            setErrorMessage('Permiso de micrófono denegado. Habilita el acceso al micrófono en la barra de direcciones de tu navegador.');
+            setErrorMessage('Permiso de micrófono denegado. Habilita el acceso al micrófono en tu navegador.');
             stopDictation();
           } else if (event.error === 'no-speech') {
-            // No speech detected yet, continue listening
+            // sigue escuchando
           } else {
-            // Switch to MediaRecorder fallback
-            console.log("Intentando fallback con MediaRecorder...");
             stopSpeechRecognition();
             startMediaRecorderFallback();
           }
@@ -167,7 +185,6 @@ function App() {
             setDictationMode('none');
             return;
           }
-          // If we didn't explicitly stop, but recognition ended, restart if still recording
           if (recognitionRef.current && isRecording) {
             try {
               recognition.start();
@@ -185,11 +202,10 @@ function App() {
         recognition.start();
         return;
       } catch (err) {
-        console.warn("No se pudo iniciar SpeechRecognition, usando MediaRecorder:", err);
+        console.warn("SpeechRecognition error, fallback a MediaRecorder:", err);
       }
     }
 
-    // Fallback: Use MediaRecorder + Deepgram server-side transcription
     startMediaRecorderFallback();
   };
 
@@ -214,7 +230,6 @@ function App() {
       };
 
       mediaRecorder.onstop = async () => {
-        // Stop audio tracks
         stream.getTracks().forEach(track => track.stop());
         mediaStreamRef.current = null;
 
@@ -233,8 +248,8 @@ function App() {
       setIsRecording(true);
       setDictationMode('mediarecorder');
     } catch (err) {
-      console.error("Error al acceder al micrófono:", err);
-      setErrorMessage('No se pudo acceder al micrófono. Por favor verifica los permisos en el navegador.');
+      console.error("Error micrófono:", err);
+      setErrorMessage('No se pudo acceder al micrófono. Por favor verifica los permisos.');
       setIsRecording(false);
       setDictationMode('none');
     }
@@ -246,9 +261,7 @@ function App() {
       recognitionRef.current = null;
       try {
         rec.stop();
-      } catch {
-        // ignore
-      }
+      } catch { }
     }
   };
 
@@ -278,9 +291,7 @@ function App() {
       recognitionRef.current = null;
       try {
         rec.abort();
-      } catch {
-        // ignore
-      }
+      } catch { }
     }
 
     if (mediaRecorderRef.current) {
@@ -290,23 +301,17 @@ function App() {
         if (mr.state !== 'inactive') {
           mr.stop();
         }
-      } catch {
-        // ignore
-      }
+      } catch { }
     }
 
     if (mediaStreamRef.current) {
       try {
         mediaStreamRef.current.getTracks().forEach(track => track.stop());
-      } catch {
-        // ignore
-      }
+      } catch { }
       mediaStreamRef.current = null;
     }
 
     audioChunksRef.current = [];
-
-    // Revert text to the state before recording began
     setArgumentText(baseTextBeforeRecordingRef.current);
   };
 
@@ -320,14 +325,12 @@ function App() {
 
   const sendAudioToDeepgram = async (audioBlob) => {
     setIsTranscribing(true);
-    setLoadingStep('Transcribiendo audio...');
+    setLoadingStep('Transcribiendo audio con Deepgram...');
     try {
-      // Convert blob to base64
       const reader = new FileReader();
       reader.readAsDataURL(audioBlob);
       reader.onloadend = async () => {
         const base64Audio = reader.result.split(',')[1];
-
         const response = await fetch(`${API_BASE}/api/transcribe`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -358,9 +361,7 @@ function App() {
     }
   };
 
-  // ==========================================
-  // Argument Evaluation
-  // ==========================================
+  // Evaluation
   const handleEvaluate = async () => {
     if (!argumentText.trim() || !selectedCase) return;
 
@@ -378,7 +379,7 @@ function App() {
         setLoadingStep('Calificando con los 4 criterios de la Rúbrica Jurídica...');
       }, 5500);
 
-      const response = await fetch(`${API_BASE}/api/evaluate`, {
+      const response = await authFetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -398,14 +399,13 @@ function App() {
       const data = await response.json();
       setEvaluation(data);
     } catch (error) {
-      console.error("Error evaluating:", error);
+      console.error("Error evaluando:", error);
       setErrorMessage(`No se pudo completar la evaluación: ${error.message}`);
     } finally {
       setIsLoading(false);
       setLoadingStep('');
     }
   };
-
 
   const handleCopyEvaluation = () => {
     if (!evaluation) return;
@@ -441,7 +441,6 @@ ${evaluation.final_feedback}
     return `${mins.toString().padStart(2, '0')}:${remainingSecs.toString().padStart(2, '0')}`;
   };
 
-  // Helper color for scores
   const getScoreColor = (score) => {
     if (score >= 4.5) return 'hsl(var(--level-5))';
     if (score >= 3.5) return 'hsl(var(--level-4))';
@@ -452,649 +451,767 @@ ${evaluation.final_feedback}
 
   return (
     <div className="app-container">
-      {/* Header */}
-      <header className="header">
-        <h1>MVP Mobile - Evaluación de Coherencia Argumentativa</h1>
-      </header>
+      {/* Top Navigation */}
+      <Navbar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        onOpenAuth={() => setShowAuthModal(true)}
+        isGuest={!user && isGuest}
+        onLogout={() => {
+          setIsGuest(false);
+          setActiveTab('casos');
+        }}
+      />
+
+      {/* Auth Modal when requested or if user clicks login */}
+      {showAuthModal && (
+        <AuthModal
+          onClose={() => setShowAuthModal(false)}
+          onEnterGuest={() => {
+            setIsGuest(true);
+            setShowAuthModal(false);
+            setActiveTab('casos');
+          }}
+          onLoginSuccess={() => {
+            setShowAuthModal(false);
+          }}
+        />
+      )}
 
       {/* Backend Offline Warning */}
       {backendStatus === 'offline' && (
-        <div className="alert-banner warning">
+        <div className="alert-banner warning" style={{ margin: '1rem 0' }}>
           <AlertCircle size={20} />
           <div>
             <strong>Servidor Backend no detectado en puerto 8000.</strong><br />
-            Asegúrate de que uvicorn esté ejecutándose: <code>uvicorn main:app --reload --port 8000</code> en la carpeta backend.
+            Verifica que uvicorn esté ejecutándose: <code>uvicorn main:app --reload --port 8000</code>.
           </div>
         </div>
       )}
 
       {/* Global Error Banner */}
       {errorMessage && (
-        <div className="alert-banner error">
+        <div className="alert-banner error" style={{ margin: '1rem 0' }}>
           <AlertCircle size={20} />
           <div>{errorMessage}</div>
         </div>
       )}
 
-      {/* View 1: Cases List */}
-      {!selectedCase ? (
-        <>
-          <div className="search-container">
-            <Search
-              style={{ position: 'absolute', left: '1rem', top: '1.05rem', color: 'hsl(var(--text-muted))' }}
-              size={18}
-            />
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Buscar por caso o palabras clave..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="cases-count-badge">
-            <span>Mostrando {filteredCases.length} de {cases.length} casos disponibles</span>
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm('')}
-                style={{ background: 'none', border: 'none', color: 'hsl(var(--primary-color))', cursor: 'pointer', fontSize: '0.8rem' }}
-              >
-                Limpiar filtro
-              </button>
-            )}
-          </div>
-
-          <div className="cases-list">
-            {filteredCases.map(c => (
-              <div
-                key={c.id}
-                className="case-card"
-                onClick={() => {
-                  setSelectedCase(c);
-                  setEvaluation(null);
-                  setArgumentText('');
-                  setIsEditingText(false);
-                  setShowTemplate(false);
-                  setShowExample(false);
-                  setErrorMessage('');
-                  cancelDictation();
-                }}
-              >
-                <div className="case-card-header">
-                  <h3 className="case-title">{c.titulo}</h3>
-                </div>
-                <p className="case-preview">{c.enunciado}</p>
-              </div>
-            ))}
-
-            {filteredCases.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'hsl(var(--text-secondary))' }}>
-                <HelpCircle size={36} style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
-                <p>No se encontraron casos que coincidan con la búsqueda "{searchTerm}".</p>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        /* View 2: Case Details and Evaluation Workspace */
-        <div className="case-detail-container">
-          <button
-            className="back-button"
-            onClick={() => {
-              cancelDictation();
-              setSelectedCase(null);
-              setIsEditingText(false);
-              setShowTemplate(false);
-              setShowExample(false);
+      {/* Standalone Authentication View when not authenticated and not entered as guest */}
+      {!user && !isGuest ? (
+        <div className="auth-standalone-container">
+          <AuthModal
+            isStandalone={true}
+            onEnterGuest={() => {
+              setIsGuest(true);
+              setActiveTab('casos');
             }}
-          >
-            <ArrowLeft size={16} />
-            Volver a la lista de casos
-          </button>
-
-          {/* Case Information Card */}
-          <div className="info-card">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <h2 style={{ fontSize: '1.35rem', fontWeight: '800' }}>{selectedCase.titulo}</h2>
-            </div>
-
-            <p style={{ color: 'hsl(var(--text-primary))', marginBottom: '1.25rem', fontSize: '0.98rem', lineHeight: '1.6' }}>
-              {selectedCase.enunciado}
-            </p>
-
-            {/* Hechos Clave del Caso */}
-            {selectedCase.contexto && selectedCase.contexto.length > 0 && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
-                <h4 className="section-title">
-                  Hechos y Contexto del Caso
-                </h4>
-                <ul className="bullet-list">
-                  {selectedCase.contexto.map((item, idx) => (
-                    <li key={idx}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Instrucciones y Pautas para el Estudiante */}
-            {selectedCase.instrucciones && selectedCase.instrucciones.length > 0 && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
-                <h4 className="section-title">
-                  Instrucciones
-                </h4>
-                <ul className="bullet-list">
-                  {selectedCase.instrucciones.map((inst, idx) => (
-                    <li key={idx}>{inst}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {/* Guías de Consulta Desplegables (Plantilla y Ejemplo no editables) */}
-          <div className="reference-guides-container">
-            {/* Desplegable 1: Plantilla */}
-            <div className="accordion-card">
-              <button
-                className="accordion-header"
-                onClick={() => setShowTemplate(prev => !prev)}
-                type="button"
-                aria-expanded={showTemplate}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
-                  <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
-                    Plantilla de Estructura Argumentativa
-                  </span>
-                </div>
-                {showTemplate ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-              </button>
-
-              {showTemplate && (
-                <div className="accordion-content">
-                  <p className="accordion-description">
-                    Estructura lógica sugerida para tu argumentación oral (modelo Stephen Toulmin). Úsala como referencia antes de grabar tu dictado:
-                  </p>
-                  <div className="template-grid">
-                    <div className="template-item">
-                      <span className="template-badge badge-claim">[1. Postura / Afirmación Inicial]</span>
-                      <p className="template-text">Sostengo que... (Expón con claridad tu posición jurídica frente al conflicto).</p>
-                    </div>
-                    <div className="template-item">
-                      <span className="template-badge badge-data">[2. Hechos del Caso]</span>
-                      <p className="template-text">En este caso se evidencia que... (Detalla los antecedentes fácticos relevantes).</p>
-                    </div>
-                    <div className="template-item">
-                      <span className="template-badge badge-warrant">[3. Garantía Lógica]</span>
-                      <p className="template-text">Todo acto o derecho exige que... (Regla o principio general que une los hechos con la conclusión).</p>
-                    </div>
-                    <div className="template-item">
-                      <span className="template-badge badge-backing">[4. Respaldo Normativo]</span>
-                      <p className="template-text">De conformidad con la Constitución / Código Civil peruano... (Cita artículos de ley o jurisprudencia).</p>
-                    </div>
-                    <div className="template-item">
-                      <span className="template-badge badge-rebuttal">[5. Reserva o Salvedad]</span>
-                      <p className="template-text">Si bien la contraparte argumenta..., carece de sustento porque... (Anticipa objeciones o contraargumentos).</p>
-                    </div>
-                    <div className="template-item">
-                      <span className="template-badge badge-conclusion">[6. Conclusión]</span>
-                      <p className="template-text">Por lo tanto, concluyo que... (Cierre categórico y consistente con las premisas).</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Desplegable 2: Ejemplo */}
-            <div className="accordion-card">
-              <button
-                className="accordion-header"
-                onClick={() => setShowExample(prev => !prev)}
-                type="button"
-                aria-expanded={showExample}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
-                  <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
-                    Ejemplo de Argumentación Jurídica
-                  </span>
-                </div>
-                {showExample ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-              </button>
-
-              {showExample && (
-                <div className="accordion-content">
-                  <p className="accordion-description">
-                    Ejemplo de discurso oral sólido para ilustrar el orden de las premisas:
-                  </p>
-                  <div className="example-text-box">
-                    “Considero que en el presente caso el contrato verbal carece de eficacia y validez vinculante plena respecto a las condiciones pretendidas. En primer lugar, de acuerdo con los hechos, no existió una manifestación de voluntad expresa ni un consentimiento indubitable sobre las prestaciones esenciales del servicio. Conforme a las normas del Código Civil peruano sobre la validez del acto jurídico y formación del consentimiento contractual, para que surja una obligación debe mediar acuerdo sobre los elementos esenciales. Aunque la contraparte apele a una supuesta intención tácita, esta resulta insuficiente ante la discrepancia probatoria. Por tanto, no puede exigirse el cumplimiento forzoso del acuerdo en las condiciones controvertidas.”
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Student Argument Input Workspace */}
-          <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <h3 className="section-title" style={{ margin: 0 }}>
-                <BookOpen size={17} style={{ color: 'hsl(var(--primary-color))' }} />
-                Tu Sustento y Postura Jurídica
-              </h3>
-            </div>
-
-            {/* Dictation Live Status Banner */}
-            {isRecording && (
-              <div className="dictation-status-bar active">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <div className="sound-waves">
-                    <span className="sound-bar"></span>
-                    <span className="sound-bar"></span>
-                    <span className="sound-bar"></span>
-                    <span className="sound-bar"></span>
-                    <span className="sound-bar"></span>
-                  </div>
-                  <strong>
-                    {/* {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo audio...' : 'Grabando audio...'} */}
-                    {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo audio...' : 'Escuchando y transcribiendo audio...'}
-                  </strong>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: '700', marginRight: '0.25rem' }}>
-                    {formatSeconds(recordingSeconds)}
-                  </span>
-                  <button
-                    className="btn-stop-recording"
-                    onClick={stopDictation}
-                    title="Detener dictado y procesar el argumento"
-                  >
-                    <MicOff size={15} />
-                    Detener
-                  </button>
-                  <button
-                    className="btn-cancel-recording"
-                    onClick={cancelDictation}
-                    title="Cancelar grabación y descartar lo hablado"
-                  >
-                    <X size={15} />
-                    Cancelar
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {isTranscribing && (
-              <div className="dictation-status-bar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
-                  <span>Procesando y transcribiendo audio...</span>
-                </div>
-              </div>
-            )}
-
-            {/* In recording mode with live text preview */}
-            {isRecording && argumentText.trim() && (
-              <div className="live-preview-box">
-                <span className="live-preview-label">Dictando en tiempo real:</span>
-                <p className="live-preview-text">{argumentText}</p>
-              </div>
-            )}
-
-            {/* Empty State: No argument dictated yet and not recording */}
-            {!argumentText.trim() && !isRecording && !isTranscribing && (
-              <div className="voice-prompt-card">
-                <button
-                  onClick={toggleRecording}
-                  disabled={isLoading || isTranscribing}
-                  className="mic-hero-button"
-                  title="Iniciar dictado por voz"
-                >
-                  <Mic size={32} />
-                </button>
-                <div style={{ textAlign: 'center' }}>
-                  <h4 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.35rem' }}>
-                    Dicta tu postura jurídica
-                  </h4>
-                  <p style={{ fontSize: '0.86rem', color: 'hsl(var(--text-secondary))', maxWidth: '440px', margin: '0 auto', lineHeight: '1.5' }}>
-                    Presiona el botón de micrófono y redacta tus argumentos oralmente.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Ready State: Transcribed text is available and not actively recording/transcribing */}
-            {argumentText.trim() && !isRecording && !isTranscribing && (
-              <>
-                {!isEditingText ? (
-                  /* Display read-only transcribed text with Edit option */
-                  <div className="transcription-display-card">
-                    <div className="transcription-card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <CheckCircle2 size={17} style={{ color: 'hsl(var(--success-color))' }} />
-                        <span style={{ fontWeight: '700', fontSize: '0.95rem' }}>Texto Transcrito por Voz</span>
-                      </div>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setIsEditingText(true)}
-                        title="Editar el texto para corregir errores de transcripción"
-                      >
-                        <Edit3 size={15} />
-                        Editar transcripción
-                      </button>
-                    </div>
-
-                    <div className="transcription-text-body">
-                      {argumentText}
-                    </div>
-                  </div>
-                ) : (
-                  /* Edit mode: Editable textarea to fix transcription mistakes */
-                  <div className="transcription-edit-card">
-                    <div className="transcription-card-header">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Edit3 size={17} style={{ color: 'hsl(var(--primary-color))' }} />
-                        <span style={{ fontWeight: '700', fontSize: '0.95rem' }}>Corregir Transcripción</span>
-                      </div>
-                      <button
-                        className="btn-primary"
-                        style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
-                        onClick={() => setIsEditingText(false)}
-                        title="Guardar corrección y cerrar edición"
-                      >
-                        <Check size={15} />
-                        Listo
-                      </button>
-                    </div>
-
-                    <textarea
-                      className="argument-textarea"
-                      value={argumentText}
-                      onChange={(e) => setArgumentText(e.target.value)}
-                      placeholder="Corrige posibles errores del dictado..."
-                      disabled={isLoading}
-                      autoFocus
-                    />
-                    <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>
-                      Corrige artículos de leyes, nombres o términos que el reconocedor de voz no haya captado con exactitud.
-                    </span>
-                  </div>
-                )}
-
-                {/* Editor Footer Actions */}
-                <div className="editor-controls">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <button
-                      onClick={toggleRecording}
-                      disabled={isLoading || isTranscribing}
-                      className="btn-secondary"
-                      title="Agregar más dictado por voz"
-                    >
-                      <Mic size={15} />
-                      Dictar más
-                    </button>
-                    <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>
-                      {argumentText.trim().split(/\s+/).length} palabras
-                    </span>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        setArgumentText('');
-                        setIsEditingText(false);
-                        setEvaluation(null);
-                      }}
-                      disabled={isLoading}
-                      title="Borrar texto y volver a dictar"
-                    >
-                      <RotateCcw size={14} />
-                      Reiniciar
-                    </button>
-
-                    <button
-                      className="btn-primary"
-                      onClick={() => {
-                        setIsEditingText(false);
-                        handleEvaluate();
-                      }}
-                      disabled={isLoading || !argumentText.trim() || backendStatus === 'offline'}
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
-                          Evaluando...
-                        </>
-                      ) : (
-                        <>
-                          <Send size={16} />
-                          Evaluar Argumento
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Loading Indicator with progress steps */}
-          {isLoading && (
-            <div className="loading-box info-card">
-              <div className="loading-spinner"></div>
-              <div>
-                <h4 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>
-                  Evaluando Coherencia y Lógica Jurídica
-                </h4>
-                <p style={{ fontSize: '0.88rem', color: 'hsl(var(--text-secondary))' }}>
-                  {loadingStep || 'Ejecutando grafo agéntico LangGraph...'}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Results: Evaluation, Toulmin Breakdown and Rubric Scores */}
-          {evaluation && !isLoading && (
-            <div className="evaluation-container">
-              {/* Header with Title and Actions */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                <div>
-                  <h3 style={{ fontSize: '1.3rem', fontWeight: '800', color: 'hsl(var(--text-primary))' }}>
-                    Resultados de la Evaluación
-                  </h3>
-                </div>
-
-                <button
-                  className="btn-secondary"
-                  onClick={handleCopyEvaluation}
-                  style={{ gap: '0.4rem' }}
-                >
-                  {copied ? <Check size={16} style={{ color: 'hsl(var(--success-color))' }} /> : <Copy size={16} />}
-                  {copied ? '¡Copiado!' : 'Copiar Dictamen'}
-                </button>
-              </div>
-
-              {/* Score Hero */}
-              {evaluation.rubric_scores && (
-                (() => {
-                  const s = evaluation.rubric_scores;
-                  const total = ((s.estructura_logica || 0) * 0.25) +
-                    ((s.relevancia_pertinencia || 0) * 0.25) +
-                    ((s.consistencia_logica || 0) * 0.25) +
-                    ((s.cohesion_calidad || 0) * 0.25);
-
-                  let nivel = "Medio";
-                  if (total <= 1.9) nivel = "Muy bajo";
-                  else if (total <= 2.9) nivel = "Bajo";
-                  else if (total <= 3.9) nivel = "Medio";
-                  else if (total <= 4.9) nivel = "Alto";
-                  else nivel = "Excelente";
-
-                  const scoreColor = getScoreColor(total);
-
-                  return (
-                    <div className="score-hero">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                        <div className="score-badge-circle" style={{ borderColor: scoreColor, color: scoreColor }}>
-                          <span className="num">{total.toFixed(2)}</span>
-                          <span className="max">de 5.00</span>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'hsl(var(--text-secondary))', fontWeight: '700' }}>
-                            Nivel de Desempeño
-                          </div>
-                          <div style={{ fontSize: '1.45rem', fontWeight: '800', color: scoreColor }}>
-                            {nivel}
-                          </div>
-                          <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))' }}>
-                            Promedio ponderado en los 4 criterios de evaluación.
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      </div>
-                    </div>
-                  );
-                })()
-              )}
-
-              {/* Rubric Criteria 4 Cards */}
-              {evaluation.rubric_scores && (
-                <div>
-                  <h4 className="section-title">
-                    Rúbrica de Evaluación (Puntaje por Criterio)
-                  </h4>
-                  <div className="rubric-grid">
-                    {[
-                      { key: 'estructura_logica', label: 'Estructura Lógica', desc: 'Premisas y conclusión' },
-                      { key: 'relevancia_pertinencia', label: 'Relevancia y Pertinencia', desc: 'Ajuste al caso y leyes' },
-                      { key: 'consistencia_logica', label: 'Consistencia Lógica', desc: 'Sin contradicciones' },
-                      { key: 'cohesion_calidad', label: 'Cohesión Discursiva', desc: 'Claridad y vocabulario' }
-                    ].map(crit => {
-                      const score = evaluation.rubric_scores[crit.key] || 0;
-                      const percentage = score > 0 ? Math.max((score / 5) * 100, 20) : 0;
-                      const color = getScoreColor(score);
-                      return (
-                        <div key={crit.key} className="rubric-card">
-                          <span className="rubric-label">{crit.label}</span>
-                          <div className="rubric-card-footer">
-                            <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>{crit.desc}</span>
-                            <span style={{ color: color }}>{score} / 5</span>
-                          </div>
-                          <div className="rubric-score-bar-bg">
-                            <div
-                              className="rubric-score-bar-fill"
-                              style={{ width: `${percentage}%`, backgroundColor: color }}
-                            ></div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Toulmin Analysis Breakdown */}
-              {evaluation.toulmin_analysis && (
-                <div>
-                  <h4 className="section-title">
-                    <Layers size={18} />
-                    Desglose del Modelo de Toulmin
-                  </h4>
-                  <div className="toulmin-grid">
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--primary-color) / 0.15)', color: 'hsl(var(--primary-color))' }}>
-                        1. Pretensión (Claim)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.claim || 'No identificada con claridad.'}</p>
-                    </div>
-
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--accent-color) / 0.15)', color: 'hsl(var(--accent-color))' }}>
-                        2. Datos / Hechos (Data)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.data || 'No se señalaron datos fácticos suficientes.'}</p>
-                    </div>
-
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--warning-color) / 0.15)', color: 'hsl(var(--warning-color))' }}>
-                        3. Garantía (Warrant)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.warrant || 'Falta conexión lógica explícita.'}</p>
-                    </div>
-
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--success-color) / 0.15)', color: 'hsl(var(--success-color))' }}>
-                        4. Respaldo (Backing)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.backing || 'Sin citas normativas o doctrinales.'}</p>
-                    </div>
-
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(280 80% 60% / 0.15)', color: 'hsl(280 80% 65%)' }}>
-                        5. Refutación / Salvedad (Rebuttal)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.rebuttal || 'No anticipa contraargumentos o excepciones.'}</p>
-                    </div>
-
-                    <div className="toulmin-item">
-                      <span className="toulmin-tag" style={{ backgroundColor: 'hsl(190 80% 50% / 0.15)', color: 'hsl(190 80% 50%)' }}>
-                        6. Cualificador Modal (Qualifier)
-                      </span>
-                      <p className="toulmin-text">{evaluation.toulmin_analysis.qualifier || 'No especificado (e.g., indudablemente, presumiblemente).'}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Dictamen */}
-              {evaluation.rubric_scores?.justificacion && (
-                <div>
-                  <h4 className="section-title">
-                    <CheckCircle2 size={18} />
-                    Observaciones
-                  </h4>
-                  <div className="feedback-box">
-                    {evaluation.rubric_scores.justificacion}
-                  </div>
-                </div>
-              )}
-
-              {/* Legal Context Retrieved via RAG */}
-              {evaluation.retrieved_laws && (
-                <div>
-                  <h4 className="section-title">
-                    <Scale size={18} />
-                    Normativa Legal y Fuentes Recuperadas
-                  </h4>
-                  <div className="laws-box">
-                    {evaluation.retrieved_laws}
-                  </div>
-                </div>
-              )}
-
-              {/* Botón para reintentar o mejorar */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                <button
-                  className="btn-secondary"
-                  onClick={() => {
-                    setIsEditingText(true);
-                    window.scrollTo({ top: 300, behavior: 'smooth' });
-                  }}
-                >
-                  <Edit3 size={16} />
-                  Ajustar y Reevaluar Postura
-                </button>
-              </div>
-            </div>
-          )}
+            onLoginSuccess={() => {
+              // Context will automatically update user
+            }}
+          />
         </div>
+      ) : (
+        <>
+          {/* Guest reminder banner when user is browsing as a guest */}
+          {!user && isGuest && (
+            <div className="guest-welcome-banner info-card" style={{ marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginTop: '0.2rem' }}>
+                    Estás navegando en modo invitado
+                  </h3>
+                  <p style={{ fontSize: '0.86rem', color: 'hsl(var(--text-secondary))' }}>
+                    Puedes resolver y evaluar casos jurídicos por dictado de voz. Para guardar tu historial institucional o vincularte a una clase, inicia sesión o regístrate.
+                  </p>
+                </div>
+                <button
+                  className="btn-primary"
+                  onClick={() => setShowAuthModal(true)}
+                >
+                  Iniciar Sesión / Registro
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ROUTING BY ROLE AND ACTIVE TAB */}
+
+      {/* DOCENTE VIEWS */}
+      {user && user.role === 'docente' && (
+        <>
+          {activeTab === 'clases' && (
+            <TeacherClasses
+              onSelectClassReport={(classId) => {
+                setSelectedClassIdForReport(classId);
+                setActiveTab('reporte');
+              }}
+            />
+          )}
+
+          {activeTab === 'reporte' && (
+            <TeacherGradesReport
+              preselectedClassId={selectedClassIdForReport}
+            />
+          )}
+
+          {activeTab === 'gestor_casos' && (
+            <TeacherCaseManager />
+          )}
+        </>
       )}
-    </div>
+
+      {/* ALUMNO VIEWS (OR GUEST VIEW) */}
+      {(!user || user.role === 'alumno') && (
+        <>
+          {activeTab === 'historial' && user && (
+            <StudentHistory />
+          )}
+
+          {activeTab === 'desempeno' && user && (
+            <StudentAnalytics />
+          )}
+
+          {activeTab === 'clase' && user && (
+            <StudentClassJoin />
+          )}
+
+          {activeTab === 'casos' && (
+            <>
+              {/* Cases List View */}
+              {!selectedCase ? (
+                <>
+                  <div className="search-container">
+                    <Search
+                      style={{ position: 'absolute', left: '1rem', top: '1.05rem', color: 'hsl(var(--text-muted))' }}
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      className="search-input"
+                      placeholder="Buscar por caso, palabras clave o docente..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="cases-count-badge">
+                    <span>Mostrando {filteredCases.length} de {cases.length} casos jurídicos</span>
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        style={{ background: 'none', border: 'none', color: 'hsl(var(--primary-color))', cursor: 'pointer', fontSize: '0.8rem' }}
+                      >
+                        Limpiar filtro
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="cases-list">
+                    {filteredCases.map(c => (
+                      <div
+                        key={c.id}
+                        className="case-card"
+                        onClick={() => {
+                          setSelectedCase(c);
+                          setEvaluation(null);
+                          setArgumentText('');
+                          setIsEditingText(false);
+                          setShowTemplate(false);
+                          setShowExample(false);
+                          setErrorMessage('');
+                          cancelDictation();
+                        }}
+                      >
+                        <div className="case-card-header">
+                          <div>
+                            <h3 className="case-title">{c.titulo}</h3>
+                            {!c.is_default && c.teacher_name && (
+                              <div className="case-published-by-tag">
+                                Caso publicado por {c.teacher_name}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <p className="case-preview">{c.enunciado}</p>
+                      </div>
+                    ))}
+
+                    {filteredCases.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'hsl(var(--text-secondary))' }}>
+                        <HelpCircle size={36} style={{ margin: '0 auto 0.5rem auto', opacity: 0.5 }} />
+                        <p>No se encontraron casos que coincidan con la búsqueda "{searchTerm}".</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* Case Details & Voice Dictation Workspace */
+                <div className="case-detail-container">
+                  <button
+                    className="back-button"
+                    onClick={() => {
+                      cancelDictation();
+                      setSelectedCase(null);
+                      setIsEditingText(false);
+                      setShowTemplate(false);
+                      setShowExample(false);
+                    }}
+                  >
+                    <ArrowLeft size={16} />
+                    Volver a la lista de casos
+                  </button>
+
+                  {/* Case Info Card */}
+                  <div className="info-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <h2 style={{ fontSize: '1.35rem', fontWeight: '800' }}>{selectedCase.titulo}</h2>
+                        {!selectedCase.is_default && selectedCase.teacher_name && (
+                          <div className="case-published-by-tag" style={{ marginTop: '0.2rem' }}>
+                            Caso publicado por {selectedCase.teacher_name}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <p style={{ color: 'hsl(var(--text-primary))', marginBottom: '1.25rem', fontSize: '0.98rem', lineHeight: '1.6' }}>
+                      {selectedCase.enunciado}
+                    </p>
+
+                    {/* Contexto del caso */}
+                    {selectedCase.contexto && (
+                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
+                        <h4 className="section-title">
+                          <FileText size={16} />
+                          Contexto y Antecedentes
+                        </h4>
+                        {Array.isArray(selectedCase.contexto) ? (
+                          <ul className="bullet-list">
+                            {selectedCase.contexto.map((item, idx) => (
+                              <li key={idx}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', lineHeight: '1.55' }}>
+                            {selectedCase.contexto}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Hechos Relevantes (si existen) */}
+                    {selectedCase.hechos_relevantes && (
+                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
+                        <h4 className="section-title">
+                          <CheckCircle2 size={16} />
+                          Hechos Relevantes
+                        </h4>
+                        <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', lineHeight: '1.55', whiteSpace: 'pre-line' }}>
+                          {selectedCase.hechos_relevantes}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Soporte Jurídico (si existe) */}
+                    {selectedCase.soporte_juridico && (
+                      <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid hsl(var(--border-color))' }}>
+                        <h4 className="section-title">
+                          <Scale size={16} />
+                          Soporte Constitucional y Jurídico Sugerido
+                        </h4>
+                        <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', lineHeight: '1.55', whiteSpace: 'pre-line' }}>
+                          {selectedCase.soporte_juridico}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Guías Desplegables de Consulta (Plantilla y Ejemplo) */}
+                  <div className="reference-guides-container">
+                    <div className="accordion-card">
+                      <button
+                        className="accordion-header"
+                        onClick={() => setShowTemplate(prev => !prev)}
+                        type="button"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                          <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
+                            Plantilla de Estructura Argumentativa
+                          </span>
+                        </div>
+                        {showTemplate ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </button>
+
+                      {showTemplate && (
+                        <div className="accordion-content">
+                          <p className="accordion-description">
+                            Estructura lógica sugerida para tu argumentación oral (modelo Stephen Toulmin):
+                          </p>
+                          <div className="template-grid">
+                            <div className="template-item">
+                              <span className="template-badge badge-claim">[1. Postura / Afirmación Inicial]</span>
+                              <p className="template-text">Sostengo que... (Expón con claridad tu posición jurídica frente al conflicto).</p>
+                            </div>
+                            <div className="template-item">
+                              <span className="template-badge badge-data">[2. Hechos del Caso]</span>
+                              <p className="template-text">En este caso se evidencia que... (Detalla los antecedentes fácticos relevantes).</p>
+                            </div>
+                            <div className="template-item">
+                              <span className="template-badge badge-warrant">[3. Garantía Lógica]</span>
+                              <p className="template-text">Todo acto o derecho exige que... (Regla o principio general que une los hechos con la conclusión).</p>
+                            </div>
+                            <div className="template-item">
+                              <span className="template-badge badge-backing">[4. Respaldo Normativo]</span>
+                              <p className="template-text">De conformidad con la Constitución / Código Civil peruano... (Cita artículos de ley o jurisprudencia).</p>
+                            </div>
+                            <div className="template-item">
+                              <span className="template-badge badge-rebuttal">[5. Reserva o Salvedad]</span>
+                              <p className="template-text">Si bien la contraparte argumenta..., carece de sustento porque... (Anticipa objeciones o contraargumentos).</p>
+                            </div>
+                            <div className="template-item">
+                              <span className="template-badge badge-conclusion">[6. Conclusión]</span>
+                              <p className="template-text">Por lo tanto, concluyo que... (Cierre categórico y consistente con las premisas).</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="accordion-card">
+                      <button
+                        className="accordion-header"
+                        onClick={() => setShowExample(prev => !prev)}
+                        type="button"
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <FileText size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                          <span style={{ fontWeight: '700', fontSize: '0.92rem' }}>
+                            Ejemplo de Argumentación Jurídica
+                          </span>
+                        </div>
+                        {showExample ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      </button>
+
+                      {showExample && (
+                        <div className="accordion-content">
+                          <p className="accordion-description">
+                            Ejemplo de discurso oral sólido para ilustrar el orden de las premisas (texto de consulta no editable):
+                          </p>
+                          <div className="example-text-box">
+                            “Considero que en el presente caso el contrato verbal carece de eficacia y validez vinculante plena respecto a las condiciones pretendidas. En primer lugar, de acuerdo con los hechos, no existió una manifestación de voluntad expresa ni un consentimiento indubitable sobre las prestaciones esenciales del servicio. Conforme a las normas del Código Civil peruano sobre la validez del acto jurídico y formación del consentimiento contractual, para que surja una obligación debe mediar acuerdo sobre los elementos esenciales. Aunque la contraparte apele a una supuesta intención tácita, esta resulta insuficiente ante la discrepancia probatoria. Por tanto, no puede exigirse el cumplimiento forzoso del acuerdo en las condiciones controvertidas.”
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Student Argument Workspace */}
+                  <div className="info-card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <h3 className="section-title" style={{ margin: 0 }}>
+                        <BookOpen size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                        Tu Sustento y Postura Jurídica
+                      </h3>
+                    </div>
+
+                    {/* Dictation Live Status Banner */}
+                    {isRecording && (
+                      <div className="dictation-status-bar active">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <div className="sound-waves">
+                            <span className="sound-bar"></span>
+                            <span className="sound-bar"></span>
+                            <span className="sound-bar"></span>
+                            <span className="sound-bar"></span>
+                            <span className="sound-bar"></span>
+                          </div>
+                          <strong>
+                            {dictationMode === 'webspeech' ? 'Escuchando y transcribiendo en vivo...' : 'Grabando audio para Deepgram...'}
+                          </strong>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: '700', marginRight: '0.25rem' }}>
+                            {formatSeconds(recordingSeconds)}
+                          </span>
+                          <button
+                            className="btn-stop-recording"
+                            onClick={stopDictation}
+                            title="Detener dictado y procesar el argumento"
+                          >
+                            <MicOff size={15} />
+                            Detener
+                          </button>
+                          <button
+                            className="btn-cancel-recording"
+                            onClick={cancelDictation}
+                            title="Cancelar grabación y descartar lo hablado"
+                          >
+                            <X size={15} />
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {isTranscribing && (
+                      <div className="dictation-status-bar">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
+                          <span>Procesando y transcribiendo audio con IA...</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Live preview while recording */}
+                    {isRecording && argumentText.trim() && (
+                      <div className="live-preview-box">
+                        <span className="live-preview-label">Dictando en tiempo real:</span>
+                        <p className="live-preview-text">{argumentText}</p>
+                      </div>
+                    )}
+
+                    {/* Empty State: Ready to record */}
+                    {!argumentText.trim() && !isRecording && !isTranscribing && (
+                      <div className="voice-prompt-card">
+                        <button
+                          onClick={toggleRecording}
+                          disabled={isLoading || isTranscribing}
+                          className="mic-hero-button"
+                          title="Iniciar dictado por voz"
+                        >
+                          <Mic size={32} />
+                        </button>
+                        <div style={{ textAlign: 'center' }}>
+                          <h4 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.35rem' }}>
+                            Dicta tu postura jurídica
+                          </h4>
+                          <p style={{ fontSize: '0.86rem', color: 'hsl(var(--text-secondary))', maxWidth: '440px', margin: '0 auto', lineHeight: '1.5' }}>
+                            La entrada por escritura manual se encuentra deshabilitada. Presiona el micrófono y redacta oralmente tu argumento.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Transcribed text available */}
+                    {argumentText.trim() && !isRecording && !isTranscribing && (
+                      <>
+                        {!isEditingText ? (
+                          <div className="transcription-display-card">
+                            <div className="transcription-card-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <CheckCircle2 size={17} style={{ color: 'hsl(var(--success-color))' }} />
+                                <span style={{ fontWeight: '700', fontSize: '0.95rem' }}>Texto Transcrito por Voz</span>
+                              </div>
+                              <button
+                                className="btn-secondary"
+                                onClick={() => setIsEditingText(true)}
+                                title="Editar para corregir errores ortográficos o de captura"
+                              >
+                                <Edit3 size={15} />
+                                Editar transcripción
+                              </button>
+                            </div>
+                            <div className="transcription-text-body">
+                              {argumentText}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="transcription-edit-card">
+                            <div className="transcription-card-header">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <Edit3 size={17} style={{ color: 'hsl(var(--primary-color))' }} />
+                                <span style={{ fontWeight: '700', fontSize: '0.95rem' }}>Corregir Transcripción</span>
+                              </div>
+                              <button
+                                className="btn-primary"
+                                style={{ padding: '0.4rem 0.85rem', fontSize: '0.85rem' }}
+                                onClick={() => setIsEditingText(false)}
+                              >
+                                <Check size={15} />
+                                Listo
+                              </button>
+                            </div>
+                            <textarea
+                              className="argument-textarea"
+                              value={argumentText}
+                              onChange={(e) => setArgumentText(e.target.value)}
+                              placeholder="Corrige posibles errores del dictado..."
+                              disabled={isLoading}
+                              autoFocus
+                            />
+                            <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>
+                              Ajusta artículos, nombres o palabras que el reconocedor no haya captado exactamente.
+                            </span>
+                          </div>
+                        )}
+
+                        {/* Controls */}
+                        <div className="editor-controls">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <button
+                              onClick={toggleRecording}
+                              disabled={isLoading || isTranscribing}
+                              className="btn-secondary"
+                              title="Dictar más argumentos"
+                            >
+                              <Mic size={15} />
+                              Dictar más
+                            </button>
+                            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>
+                              {argumentText.trim().split(/\s+/).length} palabras
+                            </span>
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            <button
+                              className="btn-secondary"
+                              onClick={() => {
+                                setArgumentText('');
+                                setIsEditingText(false);
+                                setEvaluation(null);
+                              }}
+                              disabled={isLoading}
+                            >
+                              <RotateCcw size={14} />
+                              Reiniciar
+                            </button>
+
+                            <button
+                              className="btn-primary"
+                              onClick={() => {
+                                setIsEditingText(false);
+                                handleEvaluate();
+                              }}
+                              disabled={isLoading || !argumentText.trim() || backendStatus === 'offline'}
+                            >
+                              {isLoading ? (
+                                <>
+                                  <div className="loading-spinner" style={{ width: '16px', height: '16px', borderWidth: '2px' }}></div>
+                                  Evaluando...
+                                </>
+                              ) : (
+                                <>
+                                  <Send size={16} />
+                                  Evaluar Argumento
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Loading Box */}
+                  {isLoading && (
+                    <div className="loading-box info-card">
+                      <div className="loading-spinner"></div>
+                      <div>
+                        <h4 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>
+                          Evaluando Coherencia y Lógica Jurídica
+                        </h4>
+                        <p style={{ fontSize: '0.88rem', color: 'hsl(var(--text-secondary))' }}>
+                          {loadingStep || 'Ejecutando grafo agéntico LangGraph...'}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Results Display */}
+                  {evaluation && !isLoading && (
+                    <div className="evaluation-container">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1.3rem', fontWeight: '800' }}>Resultados de la Evaluación</h3>
+                          {user?.role === 'alumno' && (
+                            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--success-color))', fontWeight: 600 }}>
+                              ✓ Guardado automáticamente en tu historial
+                            </span>
+                          )}
+                        </div>
+
+                        <button className="btn-secondary" onClick={handleCopyEvaluation} style={{ gap: '0.4rem' }}>
+                          {copied ? <Check size={16} style={{ color: 'hsl(var(--success-color))' }} /> : <Copy size={16} />}
+                          {copied ? '¡Copiado!' : 'Copiar Dictamen'}
+                        </button>
+                      </div>
+
+                      {/* Score Hero */}
+                      {evaluation.rubric_scores && (
+                        (() => {
+                          const s = evaluation.rubric_scores;
+                          const total = evaluation.score_total || (
+                            ((s.estructura_logica || 0) * 0.25) +
+                            ((s.relevancia_pertinencia || 0) * 0.25) +
+                            ((s.consistencia_logica || 0) * 0.25) +
+                            ((s.cohesion_calidad || 0) * 0.25)
+                          );
+
+                          let nivel = "Medio";
+                          if (total <= 1.9) nivel = "Muy bajo";
+                          else if (total <= 2.9) nivel = "Bajo";
+                          else if (total <= 3.9) nivel = "Medio";
+                          else if (total <= 4.9) nivel = "Alto";
+                          else nivel = "Excelente";
+
+                          const scoreColor = getScoreColor(total);
+
+                          return (
+                            <div className="score-hero">
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                                <div className="score-badge-circle" style={{ borderColor: scoreColor, color: scoreColor }}>
+                                  <span className="num">{total.toFixed(2)}</span>
+                                  <span className="max">de 5.00</span>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'hsl(var(--text-secondary))', fontWeight: '700' }}>
+                                    Nivel de Desempeño
+                                  </div>
+                                  <div style={{ fontSize: '1.45rem', fontWeight: '800', color: scoreColor }}>
+                                    {nivel}
+                                  </div>
+                                  <div style={{ fontSize: '0.82rem', color: 'hsl(var(--text-secondary))' }}>
+                                    Promedio ponderado en los 4 criterios de evaluación.
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })()
+                      )}
+
+                      {/* Rubric Criteria Cards */}
+                      {evaluation.rubric_scores && (
+                        <div>
+                          <h4 className="section-title">
+                            Rúbrica de Evaluación (Puntaje por Criterio)
+                          </h4>
+                          <div className="rubric-grid">
+                            {[
+                              { key: 'estructura_logica', label: 'Estructura Lógica', desc: 'Premisas y conclusión' },
+                              { key: 'relevancia_pertinencia', label: 'Relevancia y Pertinencia', desc: 'Ajuste al caso y leyes' },
+                              { key: 'consistencia_logica', label: 'Consistencia Lógica', desc: 'Sin contradicciones' },
+                              { key: 'cohesion_calidad', label: 'Cohesión Discursiva', desc: 'Claridad y vocabulario' }
+                            ].map(crit => {
+                              const score = evaluation.rubric_scores[crit.key] || 0;
+                              const percentage = score > 0 ? Math.max((score / 5) * 100, 20) : 0;
+                              const color = getScoreColor(score);
+                              return (
+                                <div key={crit.key} className="rubric-card">
+                                  <span className="rubric-label">{crit.label}</span>
+                                  <div className="rubric-card-footer">
+                                    <span style={{ fontSize: '0.78rem', color: 'hsl(var(--text-muted))' }}>{crit.desc}</span>
+                                    <span style={{ color: color }}>{score} / 5</span>
+                                  </div>
+                                  <div className="rubric-score-bar-bg">
+                                    <div
+                                      className="rubric-score-bar-fill"
+                                      style={{ width: `${percentage}%`, backgroundColor: color }}
+                                    ></div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Toulmin Analysis */}
+                      {evaluation.toulmin_analysis && (
+                        <div>
+                          <h4 className="section-title">
+                            <Layers size={18} />
+                            Desglose del Modelo de Toulmin
+                          </h4>
+                          <div className="toulmin-grid">
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--primary-color) / 0.15)', color: 'hsl(var(--primary-color))' }}>
+                                1. Pretensión (Claim)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.claim || 'No identificada.'}</p>
+                            </div>
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--accent-color) / 0.15)', color: 'hsl(var(--accent-color))' }}>
+                                2. Datos (Data)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.data || 'No señalados.'}</p>
+                            </div>
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--warning-color) / 0.15)', color: 'hsl(var(--warning-color))' }}>
+                                3. Garantía (Warrant)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.warrant || 'No explícita.'}</p>
+                            </div>
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(var(--success-color) / 0.15)', color: 'hsl(var(--success-color))' }}>
+                                4. Respaldo (Backing)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.backing || 'Sin citas normativas.'}</p>
+                            </div>
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(280 80% 60% / 0.15)', color: 'hsl(280 80% 65%)' }}>
+                                5. Refutación (Rebuttal)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.rebuttal || 'No anticipada.'}</p>
+                            </div>
+                            <div className="toulmin-item">
+                              <span className="toulmin-tag" style={{ backgroundColor: 'hsl(190 80% 50% / 0.15)', color: 'hsl(190 80% 50%)' }}>
+                                6. Cualificador (Qualifier)
+                              </span>
+                              <p className="toulmin-text">{evaluation.toulmin_analysis.qualifier || 'No especificado.'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Observations */}
+                      {evaluation.final_feedback && (
+                        <div>
+                          <h4 className="section-title">
+                            <CheckCircle2 size={18} />
+                            Dictamen y Observaciones Docentes
+                          </h4>
+                          <div className="feedback-box">
+                            {evaluation.final_feedback}
+                          </div>
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                        <button
+                          className="btn-secondary"
+                          onClick={() => {
+                            setIsEditingText(true);
+                            window.scrollTo({ top: 300, behavior: 'smooth' });
+                          }}
+                        >
+                          <Edit3 size={16} />
+                          Ajustar y Reevaluar Postura
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </>
+  )}
+</div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <AccessibilityProvider>
+      <AuthProvider>
+        <MainApp />
+        <AccessibilityMenu />
+      </AuthProvider>
+    </AccessibilityProvider>
+  );
+}
