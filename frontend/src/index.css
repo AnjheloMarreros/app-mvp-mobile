@@ -1212,6 +1212,62 @@ body {
   transform: translateY(-1px);
 }
 
+/* Danger Button (filled) */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: hsl(var(--danger-color));
+  color: #ffffff;
+  border: 1px solid hsl(var(--danger-color));
+  padding: 0.42rem 0.95rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: hsl(var(--danger-color) / 0.85);
+  box-shadow: 0 2px 8px hsl(var(--danger-color) / 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Danger Outline Button */
+.btn-danger-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background-color: hsl(var(--danger-color) / 0.08);
+  color: hsl(var(--danger-color));
+  border: 1px solid hsl(var(--danger-color) / 0.4);
+  padding: 0.38rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background-color: hsl(var(--danger-color));
+  color: #ffffff;
+  border-color: hsl(var(--danger-color));
+  box-shadow: 0 2px 8px hsl(var(--danger-color) / 0.35);
+  transform: translateY(-1px);
+}
+
+.btn-danger-outline:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .guest-mode-pill {
   display: inline-flex;
   align-items: center;
